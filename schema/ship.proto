@@ -1,0 +1,16 @@
+syntax = "proto3";
+package ship;
+
+option go_package = "github.com/Flahmingo-Investments/ship/schema";
+import "google/protobuf/descriptor.proto";
+
+
+// Ship event rules applied at the message level
+extend google.protobuf.MessageOptions {
+  // Adding event as true marks a message as an events and will generate the
+  // required files for it.
+  //
+  // Why, 9000?
+  // Cuz, it should be over 9000.
+  optional bool event = 9001;
+}
