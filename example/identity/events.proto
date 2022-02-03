@@ -1,0 +1,22 @@
+syntax = "proto3";
+package identity.v1;
+
+option go_package = "v1/identitypb;identitypb";
+
+import "schema/ship.proto";
+
+message UserCreated {
+  option (ship.event) = true;
+
+  string id = 1;
+  string name = 2;
+  string created_at = 3;
+}
+
+message WalletCreated {
+  option (ship.event) = true;
+
+  string id = 1;
+  string user_id = 2;
+  string created_at = 3;
+}

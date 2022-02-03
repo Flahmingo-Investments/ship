@@ -1,0 +1,18 @@
+syntax = "proto3";
+package identity.v1;
+
+option go_package = "v1/identitypb;identitypb";
+
+service IdentityService {
+  // SignupWithEmail create a new user account using email as the primary identifier.
+  rpc SignupWithEmail(SignupWithEmailRequest) returns (SignupWithEmailResponse) {}
+}
+
+message SignupWithEmailRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message SignupWithEmailResponse {
+  bool ok = 1;
+}
