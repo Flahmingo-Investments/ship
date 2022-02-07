@@ -101,8 +101,16 @@ const eventifyTemplate = `package {{ package . }}
 import (
 	"encoding/json"
 
+	"github.com/Flahmingo-Investments/ship"
 	"google.golang.org/protobuf/encoding/protojson"
 )
+
+// nolint:gochecknoinits
+func init() {
+{{ range .AllMessages -}}
+	ship.RegisterEvent(&{{ name . }}{})
+{{ end -}}
+}
 
 {{ range .AllMessages }}
 
