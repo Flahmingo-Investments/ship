@@ -10,6 +10,13 @@ schema:
 lint:
 	golangci-lint run
 
+test:
+	go test -race -coverprofile coverage.out ./...
+	go tool cover -func coverage.out
+
+generate/mock:
+	go generate ./...
+
 example: protoc-gen-go bin/protoc-gen-ship
 	rm -rf ./example/generated && mkdir -p ./example/generated
 	set -e; for subdir in `find ./example -mindepth 0 -maxdepth 1 -type d`; do \
