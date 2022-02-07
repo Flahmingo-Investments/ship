@@ -1,0 +1,221 @@
+package gcp
+
+import (
+	"context"
+	"encoding/json"
+	"reflect"
+	"time"
+
+	"cloud.google.com/go/pubsub"
+	"github.com/Flahmingo-Investments/ship"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+)
+
+// Compile time check.
+var _ ship.Subscriber = (*PubSub)(nil)
+
+// subInit check for existence of subscription name and returns it.
+// If subscription does not exists, it will throw error.
+func (p *PubSub) subInit(subName string) (*pubsub.Subscription, error) {
+	sub := p.client.Subscription(subName)
+
+	p.logger.Info("checking if subscription exists", zap.String("name", subName))
+	exists, err := sub.Exists(p.ctx)
+	if err != nil {
+		return nil, errors.Wrapf(
+			err, "could not check if subscription '%s' exists", subName,
+		)
+	}
+
+	if !exists {
+		return nil, errors.Errorf("subscription %s does not exists", subName)
+	}
+
+	return sub, nil
+}
+
+// Subscribe subscribes a handler to a given subscription.
+// It stops receiving message in case of, panics.
+//
+// It is a non-blocking call.
+// NOTE: to stop the subscriptions. Call Stop method.
+//
+// Example:
+//	pubsub, err := New("projectID")
+//	if err != nil {
+//		// do something with error
+//		return
+//	}
+//
+//	pubsub.Subscribe("some-subscription-name", handler)
+//	pubsub.Subscribe("some-subscription-name2", handler2)
+//	pubsub.Subscribe("some-subscription-name3", handler3)
+//
+func (p *PubSub) Subscribe(
+	subscription string, handler ship.MessageHandler,
+) error {
+	sub, err := p.subInit(subscription)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	p.logger.Info(
+		"starting listener for subscription", zap.String("subscription", subscription),
+	)
+	go p.handle(handler, sub)
+
+	return nil
+}
+
+type debeziumMessage struct {
+	Payload payload `json:"payload,omitempty"`
+}
+
+type payload struct {
+	ID         string    `json:"id"`
+	Type       string    `json:"type"`
+	EntityID   string    `json:"entity_id"`
+	EntityType string    `json:"entity_type"`
+	At         time.Time `json:"at"`
+	Version    uint64    `json:"version"`
+	Data       string    `json:"data"`
+	Table      string    `json:"__table"`
+	LSN        uint64    `json:"__lsn"`
+	Deleted    string    `json:"__deleted"`
+}
+
+// handle takes a message handler and a subscription.
+// nolint:funlen
+func (p *PubSub) handle(h ship.MessageHandler, sub *pubsub.Subscription) {
+	p.wg.Add(1)
+	defer p.wg.Done()
+
+	hName := reflect.TypeOf(h).Name()
+
+	p.logger.Debug(
+		"subscription started",
+		zap.String("subscription", sub.String()),
+		zap.String("handlerName", hName),
+	)
+
+	// Creating a context with cancel so, we can cancel the subscription in case
+	// of panic.
+	ctx, cancel := context.WithCancel(p.ctx)
+
+	err := sub.Receive(ctx, func(ctx context.Context, msg *pubsub.Message) {
+		// We don't want an unexpected error in consumer to take down whole application.
+		// We'll try to recover from the panic and remove the subscription from listening.
+		//
+		// This protects an application from going in a continuous crash loop in a
+		// orchestrated environment.
+		defer func() {
+			if r := recover(); r != nil {
+				p.logger.Error(
+					"[BUG]: recovered from a panic in subscription."+" "+
+						"Nacking the received message and removing the subscription from listening.",
+					zap.String("subscription", sub.String()),
+					zap.String("handlerName", hName),
+					zap.String("pubsubMessageId", msg.ID),
+				)
+				msg.Nack()
+
+				p.logger.Debug(
+					"cancelling panicked subscription context",
+					zap.String("subscription", sub.String()),
+					zap.String("handlerName", hName),
+					zap.String("pubsubMessageId", msg.ID),
+				)
+				// Cancel the context will remove stop the subscription from receiving messages.
+				cancel()
+			}
+		}()
+
+		p.logger.Debug("unmarshaling received message", zap.String("pubsubMessageId", msg.ID))
+		dbzm := debeziumMessage{}
+		err := json.Unmarshal(msg.Data, &dbzm)
+		if err != nil {
+			p.logger.Error(
+				"unable to unmarshal received message: acking it, so we don't process it again",
+				zap.Error(err),
+			)
+
+			msg.Ack()
+			return
+		}
+
+		if dbzm.Payload.Type == "" {
+			p.logger.Error(
+				"empty event type: acking it so, we don't process it again.",
+				zap.String("pubsubMessageId", msg.ID),
+				zap.String("messageId", dbzm.Payload.ID),
+			)
+
+			msg.Ack()
+			return
+		}
+
+		p.logger.Debug("getting event from registry", zap.String("eventType", dbzm.Payload.Type))
+		// Returned event is a pointer.
+		event, err := ship.GetEvent(dbzm.Payload.Type)
+		if err != nil {
+			p.logger.Error(
+				"event is not registered: nacking it so, we can reprocess it.",
+				zap.Error(err),
+				zap.String("eventType", dbzm.Payload.Type),
+			)
+
+			msg.Nack()
+			return
+		}
+
+		p.logger.Debug("unmarshaling payload data", zap.String("eventType", dbzm.Payload.Type))
+		mErr := json.Unmarshal([]byte(dbzm.Payload.Data), event)
+		if mErr != nil {
+			// Check whether the error is due to invalid type error. This could
+			// happen if a field type does not match with event field.
+			if _, ok := mErr.(*json.UnmarshalTypeError); ok {
+				p.logger.Error(
+					"[BUG]: invalid field type in event data: nacking it for reprocessing",
+					zap.Error(mErr),
+				)
+
+				msg.Nack()
+				return
+			}
+
+			p.logger.Error(
+				"unable to unmarshal event data: acking it",
+				zap.Error(mErr),
+			)
+			// Acknowleging invalid data.
+			msg.Ack()
+			return
+		}
+
+		p.logger.Debug("sending message to the handler", zap.String("handlerName", hName))
+		hErr := h.HandleMessage(ctx, &ship.Message{
+			Metadata:  msg.Attributes,
+			MessageID: dbzm.Payload.ID,
+			Data:      event,
+		})
+
+		if hErr != nil {
+			p.logger.Error("handler could not process message", zap.Error(hErr))
+			msg.Nack()
+			return
+		}
+
+		p.logger.Debug(
+			"acknowledging msg",
+			zap.String("pubsubMessageId", msg.ID),
+			zap.String("messageId", dbzm.Payload.ID),
+		)
+		msg.Ack()
+	})
+	if err != nil {
+		p.logger.Error("unable to receive messages from subscription", zap.Error(err))
+		p.errCh <- err
+		return
+	}
+}
