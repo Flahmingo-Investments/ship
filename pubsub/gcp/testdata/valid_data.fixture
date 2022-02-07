@@ -1,0 +1,56 @@
+{
+  "schema": {
+    "type": "struct",
+    "fields": [
+      {
+        "type": "string",
+        "optional": false,
+        "name": "io.debezium.data.Uuid",
+        "version": 1,
+        "default": "00000000-0000-0000-0000-000000000000",
+        "field": "id"
+      },
+      { "type": "string", "optional": false, "field": "type" },
+      {
+        "type": "string",
+        "optional": false,
+        "name": "io.debezium.data.Uuid",
+        "version": 1,
+        "field": "entity_id"
+      },
+      { "type": "string", "optional": false, "field": "entity_type" },
+      {
+        "type": "string",
+        "optional": false,
+        "name": "io.debezium.data.Json",
+        "version": 1,
+        "field": "data"
+      },
+      {
+        "type": "string",
+        "optional": false,
+        "name": "io.debezium.time.ZonedTimestamp",
+        "version": 1,
+        "field": "at"
+      },
+      { "type": "int64", "optional": false, "field": "version" },
+      { "type": "string", "optional": true, "field": "__table" },
+      { "type": "int64", "optional": true, "field": "__lsn" },
+      { "type": "string", "optional": true, "field": "__deleted" }
+    ],
+    "optional": false,
+    "name": "flahmingo.public.events.Value"
+  },
+  "payload": {
+    "id": "e79e906a-5022-473f-9a67-ff0993851be9",
+    "type": "UserCreated",
+    "entity_id": "39fe69b7-62aa-4685-99ed-d14331754a57",
+    "entity_type": "user",
+    "data": "{\"id\": \"59d7b42c7-3f77-450e-b036-d782990ef175\", \"email\": \"someone@flahmingo.com\", \"prefix\": \"1\", \"phone_number\": \"3232205135\", \"hashed_password\": \"$2a$10$MO6o594dnpUNlfhQOnT0XuaX0V1zN1iCQCqdL9tLk1.Y.kt8OsK6\"}",
+    "at": "2022-01-31T14:15:17.181841Z",
+    "version": 92697,
+    "__table": "events",
+    "__lsn": 218487408,
+    "__deleted": "false"
+  }
+}
