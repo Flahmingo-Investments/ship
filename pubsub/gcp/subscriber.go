@@ -73,16 +73,17 @@ type debeziumMessage struct {
 }
 
 type payload struct {
-	ID         string    `json:"id"`
-	Type       string    `json:"type"`
-	EntityID   string    `json:"entity_id"`
-	EntityType string    `json:"entity_type"`
-	At         time.Time `json:"at"`
-	Version    uint64    `json:"version"`
-	Data       string    `json:"data"`
-	Table      string    `json:"__table"`
-	LSN        uint64    `json:"__lsn"`
-	Deleted    string    `json:"__deleted"`
+	ID            string            `json:"id"`
+	Type          string            `json:"type"`
+	Metadata      map[string]string `json:"metadata"`
+	AggregateID   string            `json:"aggregate_id"`
+	AggregateType string            `json:"aggregate_type"`
+	At            time.Time         `json:"at"`
+	Version       uint64            `json:"version"`
+	Data          string            `json:"data"`
+	Table         string            `json:"__table"`
+	LSN           uint64            `json:"__lsn"`
+	Deleted       string            `json:"__deleted"`
 }
 
 // handle takes a message handler and a subscription.
@@ -91,7 +92,11 @@ func (p *PubSub) handle(h ship.MessageHandler, sub *pubsub.Subscription) {
 	p.wg.Add(1)
 	defer p.wg.Done()
 
-	hName := reflect.TypeOf(h).Name()
+	t := reflect.TypeOf(h)
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	hName := t.Name()
 
 	p.logger.Debug(
 		"subscription started",
@@ -195,9 +200,14 @@ func (p *PubSub) handle(h ship.MessageHandler, sub *pubsub.Subscription) {
 
 		p.logger.Debug("sending message to the handler", zap.String("handlerName", hName))
 		hErr := h.HandleMessage(ctx, &ship.Message{
-			Metadata:  msg.Attributes,
-			MessageID: dbzm.Payload.ID,
-			Data:      event,
+			ID:            dbzm.Payload.ID,
+			Metadata:      dbzm.Payload.Metadata,
+			Type:          dbzm.Payload.Type,
+			AggregateID:   dbzm.Payload.AggregateID,
+			AggregateType: dbzm.Payload.AggregateType,
+			Data:          event,
+			At:            dbzm.Payload.At,
+			Version:       dbzm.Payload.Version,
 		})
 
 		if hErr != nil {
