@@ -1,9 +1,11 @@
 package gcp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"reflect"
+	"sync"
 	"time"
 
 	"cloud.google.com/go/pubsub"
@@ -14,6 +16,13 @@ import (
 
 // Compile time check.
 var _ ship.Subscriber = (*PubSub)(nil)
+
+// _bufferPool is a pool of bytes.Buffers.
+var _bufferPool = sync.Pool{
+	New: func() interface{} {
+		return &bytes.Buffer{}
+	},
+}
 
 // subInit check for existence of subscription name and returns it.
 // If subscription does not exists, it will throw error.
@@ -143,6 +152,7 @@ func (p *PubSub) handle(h ship.MessageHandler, sub *pubsub.Subscription) {
 			p.logger.Error(
 				"unable to unmarshal received message: acking it, so we don't process it again",
 				zap.Error(err),
+				zap.String("handlerName", hName),
 			)
 
 			msg.Ack()
@@ -154,6 +164,7 @@ func (p *PubSub) handle(h ship.MessageHandler, sub *pubsub.Subscription) {
 				"empty event type: acking it so, we don't process it again.",
 				zap.String("pubsubMessageId", msg.ID),
 				zap.String("messageId", dbzm.Payload.ID),
+				zap.String("handlerName", hName),
 			)
 
 			msg.Ack()
@@ -164,13 +175,14 @@ func (p *PubSub) handle(h ship.MessageHandler, sub *pubsub.Subscription) {
 		// Returned event is a pointer.
 		event, err := ship.GetEvent(dbzm.Payload.Type)
 		if err != nil {
-			p.logger.Error(
-				"event is not registered: nacking it so, we can reprocess it.",
+			p.logger.Warn(
+				"event is not registered: replay the event for reprocessing, acking it for now.",
 				zap.Error(err),
 				zap.String("eventType", dbzm.Payload.Type),
+				zap.String("handlerName", hName),
 			)
 
-			msg.Nack()
+			msg.Ack()
 			return
 		}
 
@@ -181,24 +193,34 @@ func (p *PubSub) handle(h ship.MessageHandler, sub *pubsub.Subscription) {
 			// happen if a field type does not match with event field.
 			if _, ok := mErr.(*json.UnmarshalTypeError); ok {
 				p.logger.Error(
-					"[BUG]: invalid field type in event data: nacking it for reprocessing",
+					"[BUG]: invalid field type in event data:"+
+						" replay the event for reprocessing, acking it for now.",
 					zap.Error(mErr),
+					zap.String("eventType", dbzm.Payload.Type),
+					zap.String("handlerName", hName),
 				)
 
-				msg.Nack()
+				msg.Ack()
 				return
 			}
 
 			p.logger.Error(
 				"unable to unmarshal event data: acking it",
 				zap.Error(mErr),
+				zap.String("eventType", dbzm.Payload.Type),
+				zap.String("handlerName", hName),
 			)
+
 			// Acknowleging invalid data.
 			msg.Ack()
 			return
 		}
 
-		p.logger.Debug("sending message to the handler", zap.String("handlerName", hName))
+		p.logger.Debug(
+			"sending message to the handler",
+			zap.String("eventType", dbzm.Payload.Type),
+			zap.String("handlerName", hName),
+		)
 		hErr := h.HandleMessage(ctx, &ship.Message{
 			ID:            dbzm.Payload.ID,
 			Metadata:      dbzm.Payload.Metadata,
@@ -216,8 +238,21 @@ func (p *PubSub) handle(h ship.MessageHandler, sub *pubsub.Subscription) {
 			return
 		}
 
+		// Get bytes buffer from pool and reset it to empty out any garbage.
+		buff := _bufferPool.Get().(*bytes.Buffer)
+		buff.Reset()
+
+		buff.WriteString("acknowledging msg with event type: ")
+		buff.WriteString(dbzm.Payload.Type)
+
+		ackMsg := buff.String()
+
+		_bufferPool.Put(buff)
+
 		p.logger.Debug(
-			"acknowledging msg",
+			ackMsg,
+			zap.String("eventType", dbzm.Payload.Type),
+			zap.String("handlerName", hName),
 			zap.String("pubsubMessageId", msg.ID),
 			zap.String("messageId", dbzm.Payload.ID),
 		)
