@@ -36,6 +36,7 @@ example: protoc-gen-go bin/protoc-gen-ship
 protoc-gen-go:
 	which protoc-gen-go || (go install github.com/golang/protobuf/protoc-gen-go)
 
+.PHONY: bin/*
 bin/protoc-gen-ship:
 	go build -o ./bin/protoc-gen-ship ./protoc-gen-ship
 
