@@ -121,7 +121,7 @@ func (m *{{ name . }}) EventName() string {
 
 // {{ marshaler . }} describes the default jsonpb.Marshaler used by all 
 // instances of {{ name . }}.
-var {{ marshaler . }} = new(protojson.MarshalOptions)
+var {{ marshaler . }} = &protojson.MarshalOptions{UseProtoNames: true}
 
 // MarshalJSON satisfies the encoding/json Marshaler interface. This method 
 // uses the more correct jsonpb package to correctly marshal the message.
