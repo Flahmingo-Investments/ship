@@ -163,7 +163,7 @@ func (p *PubSub) handleRaw(h ship.RawMessageHandler, sub *pubsub.Subscription) {
 			zap.String("messageId", msg.ID),
 			zap.String("handlerName", hName),
 		)
-		hErr := h.HandleMessage(ctx, &ship.RawMessage{
+		hErr := h.HandleRawMessage(ctx, &ship.RawMessage{
 			ID:          msg.ID,
 			Attributes:  msg.Attributes,
 			Data:        msg.Data,

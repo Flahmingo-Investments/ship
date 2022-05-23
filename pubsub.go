@@ -25,8 +25,8 @@ type PubSub interface {
 
 // RawMessageHandler provides method to handle a received message.
 type RawMessageHandler interface {
-	// HandleMessage handles a received message from Subscriber.
-	HandleMessage(ctx context.Context, m *RawMessage) error
+	// HandleRawMessage handles a received message from Subscriber.
+	HandleRawMessage(ctx context.Context, m *RawMessage) error
 }
 
 // MessageHandler provides method to handle a received message.
