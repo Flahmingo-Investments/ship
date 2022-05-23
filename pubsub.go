@@ -14,12 +14,19 @@ type Publisher interface {
 type Subscriber interface {
 	// Subscribe subscribe to a given subscription.
 	Subscribe(subscription string, handler MessageHandler) error
+	SubscribeRaw(subscription string, handler RawMessageHandler) error
 }
 
 // PubSub groups both Publisher and Subscriber methods together.
 type PubSub interface {
 	Publisher
 	Subscriber
+}
+
+// RawMessageHandler provides method to handle a received message.
+type RawMessageHandler interface {
+	// HandleMessage handles a received message from Subscriber.
+	HandleMessage(ctx context.Context, m *RawMessage) error
 }
 
 // MessageHandler provides method to handle a received message.
