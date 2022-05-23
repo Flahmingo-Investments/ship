@@ -77,6 +77,120 @@ func (p *PubSub) Subscribe(
 	return nil
 }
 
+// SubscribeRaw subscribes a handler to a given subscription.
+// It stops receiving message in case of, panics.
+//
+// It is a non-blocking call.
+// NOTE: to stop the subscriptions. Call Stop method.
+//
+// Example:
+//	pubsub, err := New("projectID")
+//	if err != nil {
+//		// do something with error
+//		return
+//	}
+//
+//	pubsub.Subscribe("some-subscription-name", handler)
+//	pubsub.Subscribe("some-subscription-name2", handler2)
+//	pubsub.Subscribe("some-subscription-name3", handler3)
+//
+func (p *PubSub) SubscribeRaw(
+	subscription string, handler ship.RawMessageHandler,
+) error {
+	sub, err := p.subInit(subscription)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	p.logger.Info(
+		"starting listener for subscription", zap.String("subscription", subscription),
+	)
+	go p.handleRaw(handler, sub)
+
+	return nil
+}
+
+func (p *PubSub) handleRaw(h ship.RawMessageHandler, sub *pubsub.Subscription) {
+	p.wg.Add(1)
+	defer p.wg.Done()
+
+	t := reflect.TypeOf(h)
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	hName := t.Name()
+
+	p.logger.Debug(
+		"subscription started",
+		zap.String("subscription", sub.String()),
+		zap.String("handlerName", hName),
+	)
+
+	// Creating a context with cancel so, we can cancel the subscription in case
+	// of panic.
+	ctx, cancel := context.WithCancel(p.ctx)
+
+	err := sub.Receive(ctx, func(ctx context.Context, msg *pubsub.Message) {
+		// We don't want an unexpected error in consumer to take down whole application.
+		// We'll try to recover from the panic and remove the subscription from listening.
+		//
+		// This protects an application from going in a continuous crash loop in a
+		// orchestrated environment.
+		defer func() {
+			if r := recover(); r != nil {
+				p.logger.Error(
+					"[BUG]: recovered from a panic in subscription."+" "+
+						"Nacking the received message and removing the subscription from listening.",
+					zap.String("subscription", sub.String()),
+					zap.String("handlerName", hName),
+					zap.String("pubsubMessageId", msg.ID),
+				)
+				msg.Nack()
+
+				p.logger.Debug(
+					"cancelling panicked subscription context",
+					zap.String("subscription", sub.String()),
+					zap.String("handlerName", hName),
+					zap.String("pubsubMessageId", msg.ID),
+				)
+				// Cancel the context will remove stop the subscription from receiving messages.
+				cancel()
+			}
+		}()
+
+		p.logger.Debug(
+			"sending message to the handler",
+			zap.String("messageId", msg.ID),
+			zap.String("handlerName", hName),
+		)
+		hErr := h.HandleMessage(ctx, &ship.RawMessage{
+			ID:          msg.ID,
+			Attributes:  msg.Attributes,
+			Data:        msg.Data,
+			PublishTime: msg.PublishTime,
+			OrderingKey: msg.OrderingKey,
+		})
+
+		if hErr != nil {
+			p.logger.Error("handler could not process message", zap.Error(hErr))
+			msg.Nack()
+			return
+		}
+
+		p.logger.Debug(
+			"acknowledging raw message",
+			zap.String("handlerName", hName),
+			zap.String("pubsubMessageId", msg.ID),
+		)
+		msg.Ack()
+	})
+	if err != nil {
+		p.logger.Error("unable to receive messages from subscription", zap.Error(err))
+		p.errCh <- err
+		return
+	}
+}
+
 type debeziumMessage struct {
 	Payload payload `json:"payload,omitempty"`
 }
