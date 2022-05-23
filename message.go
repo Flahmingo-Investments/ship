@@ -30,6 +30,32 @@ func (m Metadata) Scan(v interface{}) error {
 	}
 }
 
+// RawMessage is the pure message and does not do any conversion.
+type RawMessage struct {
+	// ID identifies this message. This ID is assigned by the server and is
+	// populated for Messages obtained from a subscription.
+	//
+	// This field is read-only.
+	ID string
+
+	// Data is the actual data in the message.
+	Data []byte
+
+	// Attributes represents the key-value pairs the current message is
+	// labelled with.
+	Attributes map[string]string
+
+	// PublishTime is the time at which the message was published. This is
+	// populated by the server for Messages obtained from a subscription.
+	//
+	// This field is read-only.
+	PublishTime time.Time
+
+	// OrderingKey identifies related messages for which publish order should
+	// be respected. If empty string is used, message will be sent unordered.
+	OrderingKey string
+}
+
 // Message is the fundamental unit for passing messages and events inside a
 // ship application.
 type Message struct {
