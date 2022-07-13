@@ -7,13 +7,18 @@ import (
 // Publisher publishes message to a given topic.
 type Publisher interface {
 	// Publish publishes provided messages to given topic.
-	Publish(topic string, messages ...*Message) error
+	Publish(topic string, messages *Message) error
+
+	// PublishRaw publishes provided messages to given topic.
+	PublishRaw(topic string, message *RawMessage) error
 }
 
 // Subscriber subscribes to a given subscription.
 type Subscriber interface {
 	// Subscribe subscribe to a given subscription.
 	Subscribe(subscription string, handler MessageHandler) error
+
+	// SubscribeRaw subscribe to a given subscription.
 	SubscribeRaw(subscription string, handler RawMessageHandler) error
 }
 

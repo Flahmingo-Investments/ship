@@ -10,6 +10,8 @@ import (
 	"go.uber.org/zap"
 )
 
+var _ ship.Publisher = (*PubSub)(nil)
+
 // EnsureTopics checks whether a topic exists or not.
 //
 // If createTopic is `true` it will create the topic.
@@ -111,6 +113,57 @@ func (p *PubSub) Publish(topic string, message *ship.Message) error {
 		Attributes:  message.Metadata,
 		OrderingKey: "",
 	}
+	res := t.Publish(p.ctx, &pbMsg)
+
+	p.logger.Debug(
+		"checking if message was published successfully",
+		zap.String("topic", topic),
+	)
+	if id, err := res.Get(p.ctx); err != nil {
+		p.logger.Error(
+			"unable to publish message",
+			zap.String("topic", topic),
+			zap.String("messageId", id),
+		)
+		return errors.Wrap(err, "could not publish message")
+	}
+
+	return nil
+}
+
+// PublishRaw publishes the message to a given topic.
+func (p *PubSub) PublishRaw(topic string, message *ship.RawMessage) error {
+	p.topicsMu.RLock()
+	t, ok := p.topics[topic]
+	p.topicsMu.RUnlock()
+
+	// if topic is not cached then cache it.
+	//
+	// Why?
+	//
+	// Excerpt from pubsub.Topic documentation.
+	// Avoid creating many Topic instances if you use them to publish.
+	if !ok {
+		p.logger.Debug(
+			fmt.Sprintf("topic (%s) is not cached, caching it", topic),
+			zap.String("topic", topic),
+		)
+		t = p.client.Topic(topic)
+		t.EnableMessageOrdering = true
+
+		p.cacheTopic(topic, t)
+	}
+
+	p.logger.Debug(
+		"publishing message to topic", zap.String("topic", topic),
+	)
+
+	pbMsg := pubsub.Message{
+		Data:        message.Data,
+		Attributes:  message.Attributes,
+		OrderingKey: message.OrderingKey,
+	}
+
 	res := t.Publish(p.ctx, &pbMsg)
 
 	p.logger.Debug(
