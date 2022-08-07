@@ -124,6 +124,7 @@ func (m *{{ name . }}) EventName() string {
 var {{ marshaler . }} = &protojson.MarshalOptions{
 	UseProtoNames: true,
 	EmitUnpopulated: true,
+	AllowPartial: true,
 }
 
 // MarshalJSON satisfies the encoding/json Marshaler interface. This method 
@@ -140,7 +141,9 @@ var _ json.Marshaler = (*{{ name . }})(nil)
 
 // {{ unmarshaler . }} describes the default jsonpb.Unmarshaler used by all 
 // instances of {{ name . }}.
-var {{ unmarshaler . }} = new(protojson.UnmarshalOptions)
+var {{ unmarshaler . }} = &protojson.UnmarshalOptions{
+	AllowPartial: true,
+}
 
 // UnmarshalJSON satisfies the encoding/json Unmarshaler interface. This method 
 // uses the more correct jsonpb package to correctly unmarshal the message.
