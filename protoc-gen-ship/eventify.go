@@ -142,7 +142,8 @@ var _ json.Marshaler = (*{{ name . }})(nil)
 // {{ unmarshaler . }} describes the default jsonpb.Unmarshaler used by all 
 // instances of {{ name . }}.
 var {{ unmarshaler . }} = &protojson.UnmarshalOptions{
-	AllowPartial: true,
+	AllowPartial:   true,
+	DiscardUnknown: true,
 }
 
 // UnmarshalJSON satisfies the encoding/json Unmarshaler interface. This method 
