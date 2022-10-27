@@ -45,7 +45,7 @@ message SomethingCreated {
 Install `protoc-gen-ship` from the following command
 
 ```sh
-go get -u github.com/Flahmingo-Investments/ship/protoc-gen-ship/...
+go install github.com/Flahmingo-Investments/ship/protoc-gen-ship@latest
 ```
 
 #### 2. Get the proto file
