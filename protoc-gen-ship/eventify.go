@@ -105,7 +105,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
-// nolint:gochecknoinits,funlen
+//nolint:gochecknoinits,funlen
 func init() {
 {{ range .AllMessages -}}
 	ship.RegisterEvent(&{{ name . }}{})

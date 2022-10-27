@@ -51,6 +51,7 @@ func (p *PubSub) subInit(subName string) (*pubsub.Subscription, error) {
 // NOTE: to stop the subscriptions. Call Stop method.
 //
 // Example:
+//
 //	pubsub, err := New("projectID")
 //	if err != nil {
 //		// do something with error
@@ -60,7 +61,6 @@ func (p *PubSub) subInit(subName string) (*pubsub.Subscription, error) {
 //	pubsub.Subscribe("some-subscription-name", handler)
 //	pubsub.Subscribe("some-subscription-name2", handler2)
 //	pubsub.Subscribe("some-subscription-name3", handler3)
-//
 func (p *PubSub) Subscribe(
 	subscription string, handler ship.MessageHandler,
 ) error {
@@ -84,6 +84,7 @@ func (p *PubSub) Subscribe(
 // NOTE: to stop the subscriptions. Call Stop method.
 //
 // Example:
+//
 //	pubsub, err := New("projectID")
 //	if err != nil {
 //		// do something with error
@@ -93,7 +94,6 @@ func (p *PubSub) Subscribe(
 //	pubsub.Subscribe("some-subscription-name", handler)
 //	pubsub.Subscribe("some-subscription-name2", handler2)
 //	pubsub.Subscribe("some-subscription-name3", handler3)
-//
 func (p *PubSub) SubscribeRaw(
 	subscription string, handler ship.RawMessageHandler,
 ) error {
@@ -210,7 +210,8 @@ type payload struct {
 }
 
 // handle takes a message handler and a subscription.
-// nolint:funlen
+//
+//nolint:funlen
 func (p *PubSub) handle(h ship.MessageHandler, sub *pubsub.Subscription) {
 	p.wg.Add(1)
 	defer p.wg.Done()
